@@ -218,7 +218,13 @@
     </div>
   </div>
 
-  <div class="footer">Data sourced from PennyMac &amp; Wells Fargo statements · M1 data entered manually · Projections assume current payment rates continue</div>
+  <!-- Data Backup -->
+  <div style="text-align:center;margin-bottom:16px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+    <button class="btn" id="btnExport" style="background:linear-gradient(135deg,#10b981,#059669);font-size:13px;padding:8px 16px">Export Data</button>
+    <label class="btn" style="background:linear-gradient(135deg,#f59e0b,#d97706);font-size:13px;padding:8px 16px;cursor:pointer">Import Data<input type="file" id="btnImport" accept=".json" style="display:none"></label>
+    <button class="btn" id="btnClear" style="background:linear-gradient(135deg,#ef4444,#dc2626);font-size:13px;padding:8px 16px">Clear All Data</button>
+  </div>
+  <div class="footer">Data sourced from PennyMac &amp; Wells Fargo statements · M1 data entered manually · Projections assume current payment rates continue · Data saved in your browser via localStorage</div>
 </div>
 
 <script>
@@ -301,7 +307,8 @@ function totalInt(sched,rate){let t=0;for(let i=0;i<sched.length-1;i++)t+=sched[
 // ═══════════════════════════════════════════════════════════════════
 // COMPUTE ALL DATA
 // ═══════════════════════════════════════════════════════════════════
-let manualEntries = [];
+let manualEntries = JSON.parse(localStorage.getItem("debtDash_manualEntries") || "[]");
+function saveEntries(){ localStorage.setItem("debtDash_manualEntries", JSON.stringify(manualEntries)); }
 const TODAY = "2026-04";
 
 function compute(){
@@ -716,7 +723,7 @@ function renderEntries(){
     + manualEntries.map((e,i)=>`<tr><td>${loanNames[e.loan]}</td><td>${e.date}</td><td>${fmtFull(e.balance)}</td><td style="color:var(--text-muted)">${e.note||"—"}</td><td><button class="btn-del" data-idx="${i}">✕</button></td></tr>`).join("")
     + `</tbody></table>`;
   el.querySelectorAll(".btn-del").forEach(b=>{
-    b.addEventListener("click",()=>{manualEntries.splice(+b.dataset.idx,1);renderEntries();renderAll();});
+    b.addEventListener("click",()=>{manualEntries.splice(+b.dataset.idx,1);saveEntries();renderEntries();renderAll();});
   });
 }
 
@@ -727,6 +734,7 @@ document.getElementById("entryAdd").addEventListener("click",()=>{
   const note=document.getElementById("entryNote").value;
   if(!date||!balance)return;
   manualEntries.push({loan,date,balance:parseFloat(balance),note});
+  saveEntries();
   document.getElementById("entryDate").value="";
   document.getElementById("entryBalance").value="";
   document.getElementById("entryNote").value="";
@@ -809,6 +817,7 @@ function initPdfImport(){
       '<div class="import-stat"><div class="num" style="color:var(--accent-red)">'+errors+'</div><div class="lbl">Errors</div></div>';
 
     if(parsed > 0){
+      saveEntries();
       renderEntries();
       renderAll();
     }
@@ -877,6 +886,48 @@ function initPdfImport(){
 renderAll();
 renderEntries();
 initPdfImport();
+
+// ═══════════════════════════════════════════════════════════════════
+// DATA BACKUP: EXPORT / IMPORT / CLEAR
+// ═══════════════════════════════════════════════════════════════════
+document.getElementById("btnExport").addEventListener("click", () => {
+  const data = JSON.stringify(manualEntries, null, 2);
+  const blob = new Blob([data], {type: "application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "debt-dashboard-backup-" + new Date().toISOString().slice(0,10) + ".json";
+  a.click(); URL.revokeObjectURL(url);
+});
+
+document.getElementById("btnImport").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const imported = JSON.parse(reader.result);
+      if (!Array.isArray(imported)) throw new Error("Invalid format");
+      manualEntries = imported;
+      saveEntries();
+      renderEntries();
+      renderAll();
+      alert("Imported " + imported.length + " entries successfully!");
+    } catch(err) {
+      alert("Import failed: " + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = "";
+});
+
+document.getElementById("btnClear").addEventListener("click", () => {
+  if (confirm("Clear all manually entered data? This cannot be undone.")) {
+    manualEntries = [];
+    saveEntries();
+    renderEntries();
+    renderAll();
+  }
+});
 </script>
 </body>
 </html>
